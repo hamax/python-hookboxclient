@@ -1,6 +1,8 @@
 # python-hookboxclient
 python-hookboxclient is a Python/asyncore Hookbox client library.
 
+Dependencies: python-websocket<http://github.com/hamax/python-hookboxclient>, python-json
+
 ## Usage
 See the example.py
 
@@ -14,5 +16,5 @@ In order to allow communication over this socket, `asyncore.loop()`
 must be called by the client.
 
 ### HookboxClient.subscribe(channel)
-Subscribes to a channel.
+Subscribes to the channel.
 
