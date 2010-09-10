@@ -1,7 +1,7 @@
 # python-hookboxclient
 python-hookboxclient is a Python/asyncore Hookbox client library.
 
-Dependencies: python-websocket<http://github.com/hamax/python-hookboxclient>, python-json
+Dependencies: python-websocket(http://github.com/mtah/python-websocket), python-json
 
 ## Usage
 See the example.py
