@@ -16,7 +16,7 @@ def onSubscribed(channelName, subscription):
 def onChatPublish(frame):
 	print '[%s] %s: %s' % (frame['datetime'], frame['user'], frame['payload'])
 
-if __name__ == '__main__':	
+if __name__ == '__main__':
 	hookbox = hookboxclient.HookboxClient(onOpen = onOpen, onError = onError, onSubscribed = onSubscribed)
 
 	try:

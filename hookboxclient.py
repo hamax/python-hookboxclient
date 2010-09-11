@@ -1,4 +1,4 @@
-import websocket, json
+import websocket, json, asyncore, threading, time
 
 class HookboxClient:
 	def __init__(self, **kwargs):
@@ -56,4 +56,36 @@ class HookboxClientSubscription:
 
 	def publish(self, data):
 		self.client.send("PUBLISH", {"channel_name": self.name, "payload": json.dumps(data)})
+		
+class HookboxClientSimple:
+	def __init__(self, host, port, channel, onPublish):
+		self.channel = channel
+		self.onPublish = onPublish
+	
+		self.hookbox = HookboxClient(host = host, port = port, onOpen = self.__onOpen, onError = self.__onError, onSubscribed = self.__onSubscribed)
+		
+		t = threading.Thread(target = self.__loop)
+		t.daemon = True
+		t.start()
+		
+		self.lock = threading.Lock()
+		self.lock.acquire()
+		self.lock.acquire()
+		
+	def publish(self, data):
+		self.subscription.publish(data)
+	
+	def __onOpen(self):
+		self.hookbox.subscribe(self.channel)
+
+	def __onError(self, error):
+		print error['msg']
+
+	def __onSubscribed(self, channelName, subscription):
+		self.subscription = subscription
+		subscription.onPublish = self.onPublish
+		self.lock.release()
+		
+	def __loop(self):
+		asyncore.loop(timeout = 0.5) #this timeout is a bit hackish - I have to write a new WebSocket class to fix this, I guess
 
