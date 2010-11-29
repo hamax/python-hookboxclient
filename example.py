@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import hookboxclient, asyncore
+import hookboxclient
 
 def onOpen():
 	hookbox.subscribe('chat')
@@ -17,10 +17,7 @@ def onChatPublish(frame):
 	print '[%s] %s: %s' % (frame['datetime'], frame['user'], frame['payload'])
 
 if __name__ == '__main__':
-	hookbox = hookboxclient.HookboxClient(onOpen = onOpen, onError = onError, onSubscribed = onSubscribed)
+	hookbox = hookboxclient.HookboxClient(host = 'akira.hamax.si', port = 8002, onOpen = onOpen, onError = onError, onSubscribed = onSubscribed)
 
-	try:
-		asyncore.loop()
-	except KeyboardInterrupt:
-		hookbox.disconnect()
+	hookbox.listen()
 

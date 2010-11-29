@@ -1,4 +1,4 @@
-import websocket, json, asyncore, threading, time
+import socket, json
 
 class HookboxClient:
 	def __init__(self, **kwargs):
@@ -11,8 +11,20 @@ class HookboxClient:
 		
 		self.command_id = 1
 		self.subscriptions = {}
+		self.buff = ''
 		
-		self.ws = websocket.WebSocket('ws://%s:%s/ws' % (self.host, self.port), onopen = self.__onOpen, onmessage = self.__onMessage, onclose = self.__OnClose)
+		#connect
+		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.socket.connect((self.host, self.port))
+		
+		#handshake
+		self.handshake = True
+		self.socket.send('GET /ws HTTP/1.1\r\n')
+		self.socket.send('Host: %s:%s\r\n' % (self.host, self.port))
+		self.socket.send('Connection: Upgrade\r\n')
+		self.socket.send('Upgrade: WebSocket\r\n')
+		self.socket.send('\r\n')
+		self.socket.send('\r\n')
 		
 		if kwargs: raise ValueError('Unexpected argument(s): %s' % ', '.join(kwargs.values()))
 		
@@ -20,14 +32,14 @@ class HookboxClient:
 		self.send("SUBSCRIBE", {"channel_name": channel})
 		
 	def disconnect(self):
-		self.ws.close()
+		self.socket.close()
 		
 	def send(self, command, data):
-		self.ws.send(json.dumps([self.command_id, command, data]) + '\r\n')
+		self.socket.send('\x00' + (json.dumps([self.command_id, command, data]) + '\r\n').encode('utf-8') + '\xff')
 		self.command_id += 1
 		
-	def __onOpen(self):
-		self.send("CONNECT", {"cookie_string": self.cookie_string})
+	def close(self):
+		self.socket.close()
 
 	def __onMessage(self, data):
 		data = json.loads(data)
@@ -35,8 +47,13 @@ class HookboxClient:
 			#unused data[2]['name']?
 			if self.onOpen: self.onOpen()
 		elif data[1] == 'SUBSCRIBE':
-			self.subscriptions[data[2]['channel_name']] = HookboxClientSubscription(self, data[2]['channel_name'])
-			if self.onSubscribed: self.onSubscribed(data[2]['channel_name'], self.subscriptions[data[2]['channel_name']])
+			if 'presence' in data[2]:
+				#subscribed
+				self.subscriptions[data[2]['channel_name']] = HookboxClientSubscription(self, data[2]['channel_name'])
+				if self.onSubscribed: self.onSubscribed(data[2]['channel_name'], self.subscriptions[data[2]['channel_name']])
+			else:
+				#new member
+				pass #TODO: handle presence
 		elif data[1] == 'PUBLISH':
 			if self.subscriptions[data[2]['channel_name']].onPublish: self.subscriptions[data[2]['channel_name']].onPublish(data[2])
 		elif data[1] == 'ERROR':
@@ -45,8 +62,25 @@ class HookboxClient:
 			#TODO: handle other commands
 			pass
 		
-	def __OnClose(self):
-		pass
+	def listen(self):
+		while 1:
+			data = self.socket.recv(1024)
+			if not data: 
+				print 'connection lost'
+				break
+			self.buff += data
+			commands = self.buff.split('\r\n')
+			self.buff = commands[-1]
+			for command in commands[:-1]:
+				if self.handshake:
+					#empty command means handshake is over
+					if not command:
+						self.handshake = False
+						self.send("CONNECT", {"cookie_string": self.cookie_string})
+				else:
+					while command[0] in ['\x00', '\xff']: command = command[1:]
+					self.__onMessage(command)
+		self.socket.close()
 		
 class HookboxClientSubscription:
 	def __init__(self, client, name):
@@ -56,36 +90,4 @@ class HookboxClientSubscription:
 
 	def publish(self, data):
 		self.client.send("PUBLISH", {"channel_name": self.name, "payload": json.dumps(data)})
-		
-class HookboxClientSimple:
-	def __init__(self, host, port, channel, onPublish):
-		self.channel = channel
-		self.onPublish = onPublish
-	
-		self.hookbox = HookboxClient(host = host, port = port, onOpen = self.__onOpen, onError = self.__onError, onSubscribed = self.__onSubscribed)
-		
-		t = threading.Thread(target = self.__loop)
-		t.daemon = True
-		t.start()
-		
-		self.lock = threading.Lock()
-		self.lock.acquire()
-		self.lock.acquire()
-		
-	def publish(self, data):
-		self.subscription.publish(data)
-	
-	def __onOpen(self):
-		self.hookbox.subscribe(self.channel)
-
-	def __onError(self, error):
-		print error['msg']
-
-	def __onSubscribed(self, channelName, subscription):
-		self.subscription = subscription
-		subscription.onPublish = self.onPublish
-		self.lock.release()
-		
-	def __loop(self):
-		asyncore.loop(timeout = 0.5) #this timeout is a bit hackish - I have to write a new WebSocket class to fix this, I guess
 
